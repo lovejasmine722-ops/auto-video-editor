@@ -1,0 +1,9 @@
+output/
+source/
+*.mp4
+*.MP4
+*.srt
+*.ass
+__pycache__/
+*.pyc
+.DS_Store

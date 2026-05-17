@@ -1,0 +1,187 @@
+{
+  "name": "视频处理流水线",
+  "nodes": [
+    {
+      "name": "表单触发",
+      "type": "n8n-nodes-base.formTrigger",
+      "position": [
+        240,
+        300
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "formTitle": "视频处理流水线",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "字幕风格",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "normal"
+                  },
+                  {
+                    "option": "highlight"
+                  },
+                  {
+                    "option": "fade"
+                  },
+                  {
+                    "option": "karaoke"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "关键词",
+              "fieldType": "text",
+              "requiredField": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "STEP1去气口",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [
+        460,
+        300
+      ],
+      "typeVersion": 1,
+      "parameters": {
+        "command": "python3 /tmp/remove_silence.py 2>&1"
+      }
+    },
+    {
+      "name": "STEP2拼接",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [
+        680,
+        300
+      ],
+      "typeVersion": 1,
+      "parameters": {
+        "command": "ls ~/video-pipeline/output/trimmed3/*_cut.mp4 | sort | sed \"s/^/file '/;s/$/'/\" > /tmp/list.txt && /usr/local/bin/ffmpeg-full -f concat -safe 0 -i /tmp/list.txt -c:v libx264 -preset fast -crf 23 -c:a aac ~/video-pipeline/output/merged_temp.mp4 -y 2>&1"
+      }
+    },
+    {
+      "name": "STEP3字幕",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [
+        900,
+        300
+      ],
+      "typeVersion": 1,
+      "parameters": {
+        "command": "python3 ~/video-pipeline-STABLE/make_srt.py 2>&1"
+      }
+    },
+    {
+      "name": "STEP4样式",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [
+        1120,
+        300
+      ],
+      "typeVersion": 1,
+      "parameters": {
+        "command": "python3 ~/video-pipeline-STABLE/make_subtitle.py \"{{ .item.json[\"字幕风格\"] }}\" \"{{ .item.json[\"关键词\"] }}\" 2>&1"
+      }
+    },
+    {
+      "name": "STEP5烧录",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [
+        1340,
+        300
+      ],
+      "typeVersion": 1,
+      "parameters": {
+        "command": "STYLE={{ .item.json[\"字幕风格\"] }}; FINAL=~/video-pipeline/output/final_${STYLE}_$(date +%Y%m%d_%H%M%S).mp4; if [ \"$STYLE\" = \"normal\" ]; then /usr/local/bin/ffmpeg-full -i ~/video-pipeline/output/merged_temp.mp4 -vf \"subtitles=/Users/mac/video-pipeline/output/subtitles.srt:fontsdir=/System/Library/Fonts:force_style=FontName=STHeiti Medium,FontSize=44,Alignment=2,MarginV=150\" -c:v libx264 -preset fast -crf 23 -c:a copy $FINAL -y; else /usr/local/bin/ffmpeg-full -i ~/video-pipeline/output/merged_temp.mp4 -vf \"ass=/Users/mac/video-pipeline/output/subtitles.ass\" -c:v libx264 -preset fast -crf 23 -c:a copy $FINAL -y; fi; echo $FINAL 2>&1"
+      }
+    },
+    {
+      "name": "完成",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1560,
+        300
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "return [{json: {status: \"完成\", file: $input.first().json.stdout}}];"
+      }
+    }
+  ],
+  "connections": {
+    "表单触发": {
+      "main": [
+        [
+          {
+            "node": "STEP1去气口",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP1去气口": {
+      "main": [
+        [
+          {
+            "node": "STEP2拼接",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP2拼接": {
+      "main": [
+        [
+          {
+            "node": "STEP3字幕",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP3字幕": {
+      "main": [
+        [
+          {
+            "node": "STEP4样式",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP4样式": {
+      "main": [
+        [
+          {
+            "node": "STEP5烧录",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP5烧录": {
+      "main": [
+        [
+          {
+            "node": "完成",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
