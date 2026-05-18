@@ -2,9 +2,10 @@ import sys, re
 from pathlib import Path
 
 FONT = "/System/Library/Fonts/STHeiti Medium.ttc"
-FONTSIZE = 44        # 统一字号
-MARGIN_V = 150       # 统一位置
-MAX_CHARS = 12       # 每行最多字数
+FONTSIZE = 44
+MARGIN_V = 150
+MAX_ZH = 14   # 中文每行最多9个字
+MAX_EN = 25  # 英文每行最多25个字符
 
 style = sys.argv[1] if len(sys.argv) > 1 else "highlight"
 keywords_raw = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -29,11 +30,60 @@ def parse_srt(path):
     if current: blocks.append(current)
     return blocks
 
-def wrap(text):
-    if len(text) <= MAX_CHARS:
-        return text
-    mid = len(text) // 2
-    return text[:mid] + r"\N" + text[mid:]
+def split_to_lines(text, start, end):
+    """
+    按语境把长句切成多条字幕，每条最多9个中文字
+    每条字幕分配对应时间段
+    """
+    is_chinese = bool(re.search(r"[\u4e00-\u9fff]", text))
+    max_len = MAX_ZH if is_chinese else MAX_EN
+    
+    if len(text) <= max_len:
+        return [{"text": text, "start": start, "end": end}]
+    
+    # 按标点切割
+    parts = re.split(r'([，。！？,!?、；;])', text)
+    chunks = []
+    current = ""
+    for p in parts:
+        if p in '，。！？,!?、；;':
+            current += p
+            if current.strip():
+                chunks.append(current.strip())
+            current = ""
+        else:
+            if len(current) + len(p) > max_len and current:
+                chunks.append(current.strip())
+                current = p
+            else:
+                current += p
+    if current.strip():
+        chunks.append(current.strip())
+    
+    # 如果还是太长，强制按字数切
+    final_chunks = []
+    for chunk in chunks:
+        while len(chunk) > max_len:
+            final_chunks.append(chunk[:max_len])
+            chunk = chunk[max_len:]
+        if chunk:
+            final_chunks.append(chunk)
+    
+    if not final_chunks:
+        return [{"text": text[:max_len], "start": start, "end": end}]
+    
+    # 按字数比例分配时间
+    total_chars = sum(len(c) for c in final_chunks)
+    duration = end - start
+    result = []
+    t = start
+    for chunk in final_chunks:
+        ratio = len(chunk) / max(total_chars, 1)
+        seg_dur = duration * ratio
+        result.append({"text": chunk, "start": t, "end": t + seg_dur})
+        t += seg_dur
+    
+    return result
 
 def sec_to_ass(s):
     h,m = divmod(int(s),3600); m,sc = divmod(m,60)
@@ -44,10 +94,6 @@ def highlight_text(text):
     styled = ""
     i = 0
     while i < len(text):
-        if text[i:i+2] == r"\N":
-            styled += r"\N"
-            i += 2
-            continue
         matched = False
         for kw in keywords:
             if text[i:i+len(kw)] == kw:
@@ -64,6 +110,14 @@ srt = Path.home() / "video-pipeline/output/subtitles.srt"
 ass = Path.home() / "video-pipeline/output/subtitles.ass"
 subs = parse_srt(srt)
 
+# 把所有字幕切成单行
+all_lines = []
+for sub in subs:
+    lines = split_to_lines(sub["text"], sub["start"], sub["end"])
+    all_lines.extend(lines)
+
+print(f"✅ 原始字幕: {len(subs)} 条 → 切割后: {len(all_lines)} 条单行字幕")
+
 header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 720
@@ -78,26 +132,20 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 """
 
 events = []
-for sub in subs:
-    raw = sub["text"]
-    text = wrap(raw)
-    s = sec_to_ass(sub["start"])
-    e = sec_to_ass(sub["end"])
+for line in all_lines:
+    text = line["text"]
+    s = sec_to_ass(line["start"])
+    e = sec_to_ass(line["end"])
 
     if style == "highlight":
         styled = highlight_text(text)
-
     elif style == "fade":
-        dur = sub["end"] - sub["start"]
+        dur = line["end"] - line["start"]
         fd = min(0.3, dur/3)
-        # ASS 淡入淡出用 fad 标签
         styled = f"{{\\fad({int(fd*1000)},{int(fd*1000)})}}" + text
-
     elif style == "karaoke":
-        # 整句黄色
         styled = r"{\c&H0000FFFF&}" + text
-
-    else:  # normal
+    else:
         styled = text
 
     events.append(f"Dialogue: 0,{s},{e},Default,,0,0,0,,{styled}")
@@ -105,4 +153,4 @@ for sub in subs:
 with open(ass, "w", encoding="utf-8") as f:
     f.write(header + "\n".join(events))
 
-print(f"✅ {style} 字幕生成完成，共{len(subs)}条，关键词:{keywords}")
+print(f"✅ {style} 字幕生成完成，关键词:{keywords}")

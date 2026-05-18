@@ -66,7 +66,9 @@ echo "✅ 完成"
 echo "🔗 STEP 2: 拼接合成..."
 ls $TRIMMED/*_cut.mp4 | sort | sed "s/^/file '/;s/$/'/" > /tmp/list.txt
 $FFMPEG -f concat -safe 0 -i /tmp/list.txt \
-  -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k \
+  -c:v libx264 -preset fast -crf 23 \
+  -c:a aac -b:a 128k \
+  -af 'adelay=500|500' \
   $OUTPUT/merged_temp.mp4 -y 2>/dev/null
 echo "✅ 完成"
 
