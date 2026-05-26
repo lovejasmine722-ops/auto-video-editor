@@ -3,7 +3,6 @@ from pathlib import Path
 
 mode = sys.argv[1] if len(sys.argv) > 1 else "zh"
 model = whisper.load_model("medium")
-
 video = Path.home() / "video-pipeline/output/merged_temp.mp4"
 srt_path = Path.home() / "video-pipeline/output/subtitles.srt"
 
@@ -13,30 +12,39 @@ def fmt(s):
     return f"{h:02}:{m:02}:{sc:02},{ms:03}"
 
 if mode == "zh+en":
-    # 中文转录
+    print("📝 生成中英双语字幕...")
     zh = model.transcribe(str(video), language="zh", fp16=False,
         initial_prompt="以下是普通话口播视频内容：")
-    # 英文翻译
     en = model.transcribe(str(video), language="zh", fp16=False,
         task="translate")
-    
-    with open(srt_path, "w") as f:
-        for i, (zs, es) in enumerate(zip(zh["segments"], en["segments"]), 1):
-            f.write(f"{i}\n{fmt(zs['start'])} --> {fmt(zs['end'])}\n")
-            f.write(f"{zs['text'].strip()}\n{es['text'].strip()}\n\n")
-    print(f"✅ 中英双语字幕生成完成")
+
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for i, seg in enumerate(zh["segments"], 1):
+            # 找对应英文段
+            en_text = ""
+            for es in en["segments"]:
+                if abs(es["start"] - seg["start"]) < 1.0:
+                    en_text = es["text"].strip()
+                    break
+            zh_text = seg["text"].strip()
+            f.write(f"{i}\n{fmt(seg['start'])} --> {fmt(seg['end'])}\n")
+            f.write(f"{zh_text}\n")
+            if en_text:
+                f.write(f"{en_text}\n")
+            f.write("\n")
+    print("✅ 中英双语字幕完成")
 
 elif mode == "en":
     result = model.transcribe(str(video), language="zh", fp16=False, task="translate")
-    with open(srt_path, "w") as f:
+    with open(srt_path, "w", encoding="utf-8") as f:
         for i, seg in enumerate(result["segments"], 1):
             f.write(f"{i}\n{fmt(seg['start'])} --> {fmt(seg['end'])}\n{seg['text'].strip()}\n\n")
-    print(f"✅ 英文字幕生成完成")
+    print("✅ 英文字幕完成")
 
 else:
     result = model.transcribe(str(video), language="zh", fp16=False,
         initial_prompt="以下是普通话口播视频内容：")
-    with open(srt_path, "w") as f:
+    with open(srt_path, "w", encoding="utf-8") as f:
         for i, seg in enumerate(result["segments"], 1):
             f.write(f"{i}\n{fmt(seg['start'])} --> {fmt(seg['end'])}\n{seg['text'].strip()}\n\n")
-    print(f"✅ 中文字幕生成完成")
+    print("✅ 中文字幕完成")
