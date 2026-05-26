@@ -9,6 +9,7 @@ MAX_EN = 30
 
 style = sys.argv[1] if len(sys.argv) > 1 else "highlight"
 keywords_raw = sys.argv[2] if len(sys.argv) > 2 else ""
+lang = sys.argv[3] if len(sys.argv) > 3 else "zh"
 keywords = [w.strip() for w in re.split(r'[,，\s]+', keywords_raw) if w.strip()]
 
 def parse_srt(path):
@@ -25,17 +26,24 @@ def parse_srt(path):
             s,e = line.split(" --> ")
             current["start"] = to_sec(s.strip())
             current["end"] = to_sec(e.strip())
-        elif line and "start" in current and "text" not in current:
-            current["text"] = line
+        elif line and "start" in current:
+            # 支持多行（中英双语）
+            current.setdefault("text", "")
+            if current["text"]:
+                current["text"] += "\n" + line
+            else:
+                current["text"] = line
     if current: blocks.append(current)
     return blocks
 
-def split_to_single_lines(text, start, end):
-    """强制每条字幕只有一行，超过MAX_ZH字拆成多条"""
+def split_to_lines(text, start, end):
+    """单语言模式：强制单行，超过MAX_ZH字拆成多条"""
     is_chinese = bool(re.search(r"[\u4e00-\u9fff]", text))
     max_len = MAX_ZH if is_chinese else MAX_EN
 
-    # 先按标点切割
+    if len(text) <= max_len:
+        return [{"text": text, "start": start, "end": end}]
+
     parts = re.split(r'([，。！？,!?、；;])', text)
     chunks = []
     current = ""
@@ -54,7 +62,6 @@ def split_to_single_lines(text, start, end):
     if current.strip():
         chunks.append(current.strip())
 
-    # 再按字数强制截断
     final_chunks = []
     for chunk in chunks:
         while len(chunk) > max_len:
@@ -66,7 +73,6 @@ def split_to_single_lines(text, start, end):
     if not final_chunks:
         return [{"text": text[:max_len], "start": start, "end": end}]
 
-    # 按字数比例分配时间
     total = sum(len(c) for c in final_chunks)
     duration = end - start
     result = []
@@ -103,13 +109,25 @@ srt = Path.home() / "video-pipeline/output/subtitles.srt"
 ass = Path.home() / "video-pipeline/output/subtitles.ass"
 subs = parse_srt(srt)
 
-# 拆分成单行字幕
-all_lines = []
-for sub in subs:
-    lines = split_to_single_lines(sub["text"], sub["start"], sub["end"])
-    all_lines.extend(lines)
+# 双语模式：允许双行，不拆分
+if lang == "zh+en":
+    all_lines = []
+    for sub in subs:
+        lines = sub["text"].split("\n")
+        zh_text = lines[0] if lines else ""
+        en_text = lines[1] if len(lines) > 1 else ""
+        # 中文行高亮，英文行白色小字
+        styled = highlight_text(zh_text) if style == "highlight" else zh_text
+        if en_text:
+            styled += r"\N{\fs28\c&H00FFFFFF&}" + en_text + r"{\fs44}"
+        all_lines.append({"text": styled, "start": sub["start"], "end": sub["end"]})
+else:
+    all_lines = []
+    for sub in subs:
+        lines = split_to_lines(sub["text"], sub["start"], sub["end"])
+        all_lines.extend(lines)
 
-print(f"✅ 原始: {len(subs)}条 → 单行: {len(all_lines)}条")
+print(f"✅ 字幕: {len(all_lines)}条 语言:{lang} 风格:{style}")
 
 header = f"""[Script Info]
 ScriptType: v4.00+
@@ -126,24 +144,23 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 
 events = []
 for line in all_lines:
-    text = line["text"]
+    text = line["text"] if lang == "zh+en" else line["text"]
     s = sec_to_ass(line["start"])
     e = sec_to_ass(line["end"])
 
-    if style == "highlight":
-        styled = highlight_text(text)
-    elif style == "fade":
-        dur = line["end"] - line["start"]
-        fd = min(0.3, dur/3)
-        styled = f"{{\\fad({int(fd*1000)},{int(fd*1000)})}}" + text
-    elif style == "karaoke":
-        styled = r"{\c&H0000FFFF&}" + text
-    else:
-        styled = text
+    if lang != "zh+en":
+        if style == "highlight":
+            text = highlight_text(text)
+        elif style == "fade":
+            dur = line["end"] - line["start"]
+            fd = min(0.3, dur/3)
+            text = f"{{\\fad({int(fd*1000)},{int(fd*1000)})}}" + text
+        elif style == "karaoke":
+            text = r"{\c&H0000FFFF&}" + text
 
-    events.append(f"Dialogue: 0,{s},{e},Default,,0,0,0,,{styled}")
+    events.append(f"Dialogue: 0,{s},{e},Default,,0,0,0,,{text}")
 
 with open(ass, "w", encoding="utf-8") as f:
     f.write(header + "\n".join(events))
 
-print(f"✅ {style} 字幕生成完成，关键词:{keywords}")
+print(f"✅ ASS字幕生成完成")
