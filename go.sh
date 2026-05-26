@@ -80,7 +80,7 @@ echo "✅ 完成"
 # STEP 4: 字幕样式（传入已收集的 STYLE 和 KEYWORDS）
 echo "🎨 STEP 4: 生成字幕样式 ($STYLE)..."
 echo "   关键词传入: $KEYWORDS"
-python3 ~/video-pipeline-STABLE/make_subtitle.py "$STYLE" "$KEYWORDS" "$LANG"
+python3 ~/video-pipeline-STABLE/make_subtitle.py "$STYLE" "$KEYWORDS" "$LANG" "$LANG"
 
 # STEP 5: 烧录
 echo "🎞️  STEP 5: 烧录字幕..."
