@@ -59,7 +59,7 @@ echo "继续处理..."
 echo ""
 echo "✂️  STEP 1: 去除气口..."
 rm -rf $TRIMMED && mkdir -p $TRIMMED
-python3 /tmp/remove_silence.py
+python3 ~/video-pipeline-STABLE/remove_silence.py
 echo "✅ 完成"
 
 # STEP 2: 拼接
@@ -74,13 +74,13 @@ echo "✅ 完成"
 
 # STEP 3: Whisper 字幕
 echo "📝 STEP 3: 生成字幕..."
-python3 ~/video-pipeline/scripts/make_srt.py
+python3 ~/video-pipeline-STABLE/make_srt.py
 echo "✅ 完成"
 
 # STEP 4: 字幕样式（传入已收集的 STYLE 和 KEYWORDS）
 echo "🎨 STEP 4: 生成字幕样式 ($STYLE)..."
 echo "   关键词传入: $KEYWORDS"
-python3 ~/video-pipeline/scripts/make_subtitle.py "$STYLE" "$KEYWORDS"
+python3 ~/video-pipeline-STABLE/make_subtitle.py "$STYLE" "$KEYWORDS"
 
 # STEP 5: 烧录
 echo "🎞️  STEP 5: 烧录字幕..."

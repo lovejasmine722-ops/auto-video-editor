@@ -4,8 +4,8 @@ from pathlib import Path
 FONT = "/System/Library/Fonts/STHeiti Medium.ttc"
 FONTSIZE = 44
 MARGIN_V = 150
-MAX_ZH = 14   # 中文每行最多9个字
-MAX_EN = 25  # 英文每行最多25个字符
+MAX_ZH = 14
+MAX_EN = 30
 
 style = sys.argv[1] if len(sys.argv) > 1 else "highlight"
 keywords_raw = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -30,18 +30,12 @@ def parse_srt(path):
     if current: blocks.append(current)
     return blocks
 
-def split_to_lines(text, start, end):
-    """
-    按语境把长句切成多条字幕，每条最多9个中文字
-    每条字幕分配对应时间段
-    """
+def split_to_single_lines(text, start, end):
+    """强制每条字幕只有一行，超过MAX_ZH字拆成多条"""
     is_chinese = bool(re.search(r"[\u4e00-\u9fff]", text))
     max_len = MAX_ZH if is_chinese else MAX_EN
-    
-    if len(text) <= max_len:
-        return [{"text": text, "start": start, "end": end}]
-    
-    # 按标点切割
+
+    # 先按标点切割
     parts = re.split(r'([，。！？,!?、；;])', text)
     chunks = []
     current = ""
@@ -59,8 +53,8 @@ def split_to_lines(text, start, end):
                 current += p
     if current.strip():
         chunks.append(current.strip())
-    
-    # 如果还是太长，强制按字数切
+
+    # 再按字数强制截断
     final_chunks = []
     for chunk in chunks:
         while len(chunk) > max_len:
@@ -68,21 +62,20 @@ def split_to_lines(text, start, end):
             chunk = chunk[max_len:]
         if chunk:
             final_chunks.append(chunk)
-    
+
     if not final_chunks:
         return [{"text": text[:max_len], "start": start, "end": end}]
-    
+
     # 按字数比例分配时间
-    total_chars = sum(len(c) for c in final_chunks)
+    total = sum(len(c) for c in final_chunks)
     duration = end - start
     result = []
     t = start
     for chunk in final_chunks:
-        ratio = len(chunk) / max(total_chars, 1)
+        ratio = len(chunk) / max(total, 1)
         seg_dur = duration * ratio
         result.append({"text": chunk, "start": t, "end": t + seg_dur})
         t += seg_dur
-    
     return result
 
 def sec_to_ass(s):
@@ -110,13 +103,13 @@ srt = Path.home() / "video-pipeline/output/subtitles.srt"
 ass = Path.home() / "video-pipeline/output/subtitles.ass"
 subs = parse_srt(srt)
 
-# 把所有字幕切成单行
+# 拆分成单行字幕
 all_lines = []
 for sub in subs:
-    lines = split_to_lines(sub["text"], sub["start"], sub["end"])
+    lines = split_to_single_lines(sub["text"], sub["start"], sub["end"])
     all_lines.extend(lines)
 
-print(f"✅ 原始字幕: {len(subs)} 条 → 切割后: {len(all_lines)} 条单行字幕")
+print(f"✅ 原始: {len(subs)}条 → 单行: {len(all_lines)}条")
 
 header = f"""[Script Info]
 ScriptType: v4.00+
