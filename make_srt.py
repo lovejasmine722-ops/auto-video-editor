@@ -1,9 +1,31 @@
 import whisper, sys
 from pathlib import Path
 
+# 接收语言参数
+# python3 make_srt.py zh     → 纯中文字幕
+# python3 make_srt.py en     → 纯英文字幕  
+# python3 make_srt.py zh+en  → 中英双语字幕
+
 mode = sys.argv[1] if len(sys.argv) > 1 else "zh"
+
 model = whisper.load_model("medium")
-video = Path.home() / "video-pipeline/output/merged_temp.mp4"
+
+if mode == "en":
+    # 直接转录为英文
+    result = model.transcribe(
+        str(Path.home() / "video-pipeline/output/merged_temp.mp4"),
+        language="zh", fp16=False,
+        task="translate",  # ← 直接翻译成英文
+        initial_prompt="The following is a Chinese video translated to English:"
+    )
+else:
+    # 中文转录
+    result = model.transcribe(
+        str(Path.home() / "video-pipeline/output/merged_temp.mp4"),
+        language="zh", fp16=False,
+        initial_prompt="以下是普通话口播视频内容："
+    )
+
 srt_path = Path.home() / "video-pipeline/output/subtitles.srt"
 
 def fmt(s):
@@ -11,40 +33,28 @@ def fmt(s):
     ms = int((s-int(s))*1000)
     return f"{h:02}:{m:02}:{sc:02},{ms:03}"
 
+# 如果双语，提前翻译一次
 if mode == "zh+en":
-    print("📝 生成中英双语字幕...")
-    zh = model.transcribe(str(video), language="zh", fp16=False,
-        initial_prompt="以下是普通话口播视频内容：")
-    en = model.transcribe(str(video), language="zh", fp16=False,
-        task="translate")
+    en_result = model.transcribe(
+        str(Path.home() / "video-pipeline/output/merged_temp.mp4"),
+        language="zh", fp16=False, task="translate"
+    )
+    en_segs = en_result["segments"]
 
-    with open(srt_path, "w", encoding="utf-8") as f:
-        for i, seg in enumerate(zh["segments"], 1):
-            # 找对应英文段
-            en_text = ""
-            for es in en["segments"]:
-                if abs(es["start"] - seg["start"]) < 1.0:
-                    en_text = es["text"].strip()
-                    break
-            zh_text = seg["text"].strip()
-            f.write(f"{i}\n{fmt(seg['start'])} --> {fmt(seg['end'])}\n")
-            f.write(f"{zh_text}\n")
-            if en_text:
-                f.write(f"{en_text}\n")
-            f.write("\n")
-    print("✅ 中英双语字幕完成")
+with open(srt_path, "w", encoding="utf-8") as f:
+    for i, seg in enumerate(result["segments"], 1):
+        zh_text = seg["text"].strip()
+        if mode == "zh+en":
+            # 找时间重叠最多的英文段
+            best_en, best_overlap = "", 0
+            for es in en_segs:
+                overlap = min(seg["end"], es["end"]) - max(seg["start"], es["start"])
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_en = es["text"].strip()
+            text = f"{zh_text}\n{best_en}"
+        else:
+            text = zh_text
+        f.write(f"{i}\n{fmt(seg['start'])} --> {fmt(seg['end'])}\n{text}\n\n")
 
-elif mode == "en":
-    result = model.transcribe(str(video), language="zh", fp16=False, task="translate")
-    with open(srt_path, "w", encoding="utf-8") as f:
-        for i, seg in enumerate(result["segments"], 1):
-            f.write(f"{i}\n{fmt(seg['start'])} --> {fmt(seg['end'])}\n{seg['text'].strip()}\n\n")
-    print("✅ 英文字幕完成")
-
-else:
-    result = model.transcribe(str(video), language="zh", fp16=False,
-        initial_prompt="以下是普通话口播视频内容：")
-    with open(srt_path, "w", encoding="utf-8") as f:
-        for i, seg in enumerate(result["segments"], 1):
-            f.write(f"{i}\n{fmt(seg['start'])} --> {fmt(seg['end'])}\n{seg['text'].strip()}\n\n")
-    print("✅ 中文字幕完成")
+print(f"✅ 字幕生成完成（模式: {mode}）")

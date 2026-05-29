@@ -74,13 +74,13 @@ echo "✅ 完成"
 
 # STEP 3: Whisper 字幕
 echo "📝 STEP 3: 生成字幕..."
-python3 ~/video-pipeline-STABLE/make_srt.py
+python3 ~/video-pipeline-STABLE/make_srt.py $LANG
 echo "✅ 完成"
 
 # STEP 4: 字幕样式（传入已收集的 STYLE 和 KEYWORDS）
 echo "🎨 STEP 4: 生成字幕样式 ($STYLE)..."
 echo "   关键词传入: $KEYWORDS"
-python3 ~/video-pipeline-STABLE/make_subtitle.py "$STYLE" "$KEYWORDS" "$LANG" "$LANG"
+python3 ~/video-pipeline-STABLE/make_subtitle.py "$STYLE" "$KEYWORDS" "$LANG"
 
 # STEP 5: 烧录
 echo "🎞️  STEP 5: 烧录字幕..."
@@ -113,63 +113,3 @@ echo "   大小: $SIZE"
 echo "   时长: ${MIN}分${SEC}秒"
 echo "======================================="
 open $OUTPUT
-
-# ===== 发布步骤 =====
-echo ""
-read -p "是否现在发布到平台？(y/n): " PUBLISH
-if [ "$PUBLISH" = "y" ]; then
-  echo ""
-  echo "📢 选择发布平台："
-  echo "   1) 抖音  2) 小红书  3) 视频号  4) 快手"
-  read -p "输入数字（空格分隔）: " PLATFORMS
-  read -p "视频标题: " TITLE
-  read -p "关键词标签（空格分隔）: " TAGS
-  read -p "原创声明？(y/n，默认y): " ORIGINAL
-  [ "$ORIGINAL" = "n" ] && IS_ORIGINAL="false" || IS_ORIGINAL="true"
-
-  echo ""
-  echo "📋 发布预览："
-  echo "   标题: $TITLE"
-  echo "   平台: $PLATFORMS"
-  echo "   标签: $TAGS"
-  echo "   原创: $IS_ORIGINAL"
-  echo "   视频: $FINAL"
-  read -p "确认发布？(y/n): " CONFIRM
-
-  if [ "$CONFIRM" = "y" ]; then
-    open http://localhost:8080
-    echo "✅ 请在 AiToEarn 界面上传: $FINAL"
-    echo "   视频路径已复制，直接在 AiToEarn 里选择该文件"
-    echo "$FINAL" | pbcopy
-  fi
-fi
-
-# ===== 发布步骤 =====
-echo ""
-read -p "是否现在发布到平台？(y/n): " PUBLISH
-if [ "$PUBLISH" = "y" ]; then
-  echo ""
-  echo "📢 选择发布平台："
-  echo "   1) 抖音  2) 小红书  3) 视频号  4) 快手"
-  read -p "输入数字（空格分隔）: " PLATFORMS
-  read -p "视频标题: " TITLE
-  read -p "关键词标签（空格分隔）: " TAGS
-  read -p "原创声明？(y/n，默认y): " ORIGINAL
-  [ "$ORIGINAL" = "n" ] && IS_ORIGINAL="false" || IS_ORIGINAL="true"
-
-  echo ""
-  echo "📋 发布预览："
-  echo "   标题: $TITLE"
-  echo "   平台: $PLATFORMS"
-  echo "   标签: $TAGS"
-  echo "   原创: $IS_ORIGINAL"
-  echo "   视频: $FINAL"
-  read -p "确认发布？(y/n): " CONFIRM
-
-  if [ "$CONFIRM" = "y" ]; then
-    open http://localhost:8080
-    echo "✅ 请在 AiToEarn 界面上传: $FINAL"
-    echo "   视频路径已复制，直接在 AiToEarn 里选择该文件"
-    echo "$FINAL" | pbcopy
-  fi
-fi
