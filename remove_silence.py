@@ -76,6 +76,6 @@ out_dir.mkdir(parents=True, exist_ok=True)
 
 for f in sorted(source_dir.glob("*.MP4")):
     out = out_dir / f"{f.stem}_cut.mp4"
-    remove_silence(f, out, min_silence=0.2, threshold=-30)
+    remove_silence(f, out, min_silence=0.1, threshold=-30)
 
 print("\n✅ 全部处理完成！")
