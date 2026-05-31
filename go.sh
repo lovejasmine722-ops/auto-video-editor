@@ -77,6 +77,23 @@ echo "📝 STEP 3: 生成字幕..."
 python3 ~/video-pipeline-STABLE/make_srt.py $LANG
 echo "✅ 完成"
 
+# STEP 3.5: 手动编辑字幕
+SRT_PATH="$HOME/video-pipeline/output/subtitles.srt"
+echo ""
+echo "📄 字幕内容如下："
+echo "---------------------------------------"
+cat "$SRT_PATH"
+echo "---------------------------------------"
+echo ""
+echo "✏️  按回车进入编辑（nano）；不需要改直接输入 s 回车跳过"
+   echo "   编辑完成后按 Ctrl+O 回车保存，Ctrl+X 退出；支持鼠标选中复制粘贴"
+   echo "   编辑完成后按 Ctrl+O 回车保存，Ctrl+X 退出；支持鼠标选中复制粘贴"
+read _EDIT_CHOICE
+if [ "$_EDIT_CHOICE" != "s" ]; then
+  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 nano "$SRT_PATH"
+fi
+echo "继续处理..."
+
 # STEP 4: 字幕样式（传入已收集的 STYLE 和 KEYWORDS）
 echo "🎨 STEP 4: 生成字幕样式 ($STYLE)..."
 echo "   关键词传入: $KEYWORDS"
@@ -86,15 +103,17 @@ python3 ~/video-pipeline-STABLE/make_subtitle.py "$STYLE" "$KEYWORDS" "$LANG"
 echo "🎞️  STEP 5: 烧录字幕..."
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 FINAL=$OUTPUT/final_${STYLE}_${TIMESTAMP}.mp4
+mkdir -p /tmp/assfonts
+cp "/System/Library/Fonts/STHeiti Medium.ttc" /tmp/assfonts/ 2>/dev/null
 
 if [ "$STYLE" = "normal" ]; then
   $FFMPEG -i $OUTPUT/merged_temp.mp4 \
-    -vf "subtitles=/Users/mac/video-pipeline/output/subtitles.srt:fontsdir=/System/Library/Fonts:force_style='FontName=STHeiti Medium,FontSize=44,Alignment=2,MarginV=150,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,WrapStyle=1'" \
+    -vf "subtitles=/Users/mac/video-pipeline/output/subtitles.srt:fontsdir=/tmp/assfonts:force_style='FontName=STHeiti Medium,FontSize=44,Alignment=2,MarginV=150,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,WrapStyle=1'" \
     -c:v libx264 -preset fast -crf 23 -c:a copy \
     $FINAL -y 2>/dev/null
 else
   $FFMPEG -i $OUTPUT/merged_temp.mp4 \
-    -vf "ass=/Users/mac/video-pipeline/output/subtitles.ass" \
+    -vf "ass=/Users/mac/video-pipeline/output/subtitles.ass:fontsdir=/tmp/assfonts" \
     -c:v libx264 -preset fast -crf 23 -c:a copy \
     $FINAL -y 2>/dev/null
 fi

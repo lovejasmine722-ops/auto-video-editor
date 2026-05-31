@@ -35,17 +35,10 @@ def parse_srt(path):
     return blocks
 
 def split_to_lines(text, start, end):
-    """
-    按语境把长句切成多条字幕，每条最多9个中文字
-    每条字幕分配对应时间段
-    """
     is_chinese = bool(re.search(r"[\u4e00-\u9fff]", text))
     max_len = MAX_ZH if is_chinese else MAX_EN
-    
     if len(text) <= max_len:
         return [{"text": text, "start": start, "end": end}]
-    
-    # 按标点切割
     parts = re.split(r'([，。！？,!?、；;])', text)
     chunks = []
     current = ""
@@ -63,8 +56,6 @@ def split_to_lines(text, start, end):
                 current += p
     if current.strip():
         chunks.append(current.strip())
-    
-    # 如果还是太长，强制按字数切
     final_chunks = []
     for chunk in chunks:
         while len(chunk) > max_len:
@@ -72,11 +63,8 @@ def split_to_lines(text, start, end):
             chunk = chunk[max_len:]
         if chunk:
             final_chunks.append(chunk)
-    
     if not final_chunks:
         return [{"text": text[:max_len], "start": start, "end": end}]
-    
-    # 按字数比例分配时间
     total_chars = sum(len(c) for c in final_chunks)
     duration = end - start
     result = []
@@ -86,7 +74,6 @@ def split_to_lines(text, start, end):
         seg_dur = duration * ratio
         result.append({"text": chunk, "start": t, "end": t + seg_dur})
         t += seg_dur
-    
     return result
 
 def sec_to_ass(s):
@@ -101,7 +88,7 @@ def highlight_text(text):
         matched = False
         for kw in keywords:
             if text[i:i+len(kw)] == kw:
-                styled += r"{\c&H0000FFFF&\b1}" + kw + r"{\c&H00FFFFFF&\b0}"
+                styled += r"{\c&H0000FFFF&}{\b1}" + kw + r"{\b0}{\c&H00FFFFFF&}"
                 i += len(kw)
                 matched = True
                 break
@@ -114,23 +101,17 @@ srt = Path.home() / "video-pipeline/output/subtitles.srt"
 ass = Path.home() / "video-pipeline/output/subtitles.ass"
 subs = parse_srt(srt)
 
-# 把所有字幕切成单行
 all_lines = []
 for sub in subs:
     lines = split_to_lines(sub["text"], sub["start"], sub["end"])
     all_lines.extend(lines)
 
 if lang == "zh+en":
-    # 双语模式：每条字幕保留中英两行，中文19字，英文38字符
     all_lines = []
     for sub in subs:
-        lines = sub["text"].split("\n") if hasattr(sub["text"], "split") else [sub["text"]]
         zh = sub.get("text","")[:MAX_ZH]
         en = sub.get("text2","")[:38]
-        combined = zh + (f"\\N{{\\fs28}}{en}" if en else "")
-        all_lines.append({"text": combined, "start": sub["start"], "end": sub["end"]})
-else:
-    pass  # all_lines already set above
+        all_lines.append({"text": zh, "text2": en, "start": sub["start"], "end": sub["end"]})
 
 print(f"✅ 原始字幕: {len(subs)} 条 → 切割后: {len(all_lines)} 条单行字幕")
 
@@ -142,6 +123,7 @@ PlayResY: 1280
 [V4+ Styles]
 Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
 Style: Default,STHeiti Medium,{FONTSIZE},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,1,2,1,2,20,20,{MARGIN_V},1
+Style: EnSub,STHeiti Medium,28,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,1,2,1,2,20,20,90,1
 
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
@@ -164,7 +146,13 @@ for line in all_lines:
     else:
         styled = text
 
-    events.append(f"Dialogue: 0,{s},{e},Default,,0,0,0,,{styled}")
+    if lang == "zh+en":
+        en = line.get("text2", "")
+        events.append(f"Dialogue: 0,{s},{e},Default,,0,0,0,,{styled}")
+        if en:
+            events.append(f"Dialogue: 0,{s},{e},EnSub,,0,0,0,,{en}")
+    else:
+        events.append(f"Dialogue: 0,{s},{e},Default,,0,0,0,,{styled}")
 
 with open(ass, "w", encoding="utf-8") as f:
     f.write(header + "\n".join(events))
